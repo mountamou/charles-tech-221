@@ -1,0 +1,15 @@
+.env
+.env.*
+.git
+.venv*
+.python
+.uv-cache
+.pytest_cache
+**/__pycache__
+*.db
+*.db-*
+*.log
+*.zip
+app/uploads
+design-backup
+tests

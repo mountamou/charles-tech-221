@@ -1,0 +1,46 @@
+{
+	"name": "charles-tech-221",
+	"main": "src/index.js",
+	"compatibility_date": "2026-09-11",
+	"containers": [
+		{
+			"class_name": "Backend",
+			"image": "./Dockerfile",
+			"max_instances": 1,
+			"instance_type": "basic"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "Backend",
+				"name": "BACKEND"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["Backend"]
+		}
+	],
+	"vars": {
+		"ENVIRONMENT": "production",
+		"ADMIN_EMAIL": "charlescamara310@gmail.com",
+		"EMPLOYEE_EMAIL": "employee@charlestech221.sn",
+		"CONTACT_PHONE": "+221781910585",
+		"CONTACT_EMAIL": "charlestech221@gmail.com",
+		"COMPANY_NAME": "Charles Tech 221",
+		"COMPANY_ADDRESS": "Sénégal",
+		"CURRENCY": "FCFA",
+		"WAVE_MERCHANT_NUMBER": "+221781910585",
+		"ORANGE_MONEY_NUMBER": "+221781910585",
+		// TODO: fill in once R2 is enabled on the account (Cloudflare dashboard > R2 > Overview)
+		"R2_ACCOUNT_ID": "",
+		"R2_BUCKET": "charlestech221-uploads"
+	},
+	"routes": [
+		{ "pattern": "charlestech221.com", "custom_domain": true },
+		{ "pattern": "www.charlestech221.com", "custom_domain": true }
+	]
+}

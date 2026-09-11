@@ -1,0 +1,13 @@
+{
+	"name": "charles-tech-221",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy"
+	},
+	"dependencies": {
+		"@cloudflare/containers": "^0.3.7"
+	},
+	"devDependencies": {
+		"wrangler": "^4.131.0"
+	}
+}
