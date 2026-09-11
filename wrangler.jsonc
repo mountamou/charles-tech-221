@@ -35,8 +35,7 @@
 		"CURRENCY": "FCFA",
 		"WAVE_MERCHANT_NUMBER": "+221781910585",
 		"ORANGE_MONEY_NUMBER": "+221781910585",
-		// TODO: fill in once R2 is enabled on the account (Cloudflare dashboard > R2 > Overview)
-		"R2_ACCOUNT_ID": "",
+		"R2_ACCOUNT_ID": "f69c31c057ddfd20322c71943f8f036c",
 		"R2_BUCKET": "charlestech221-uploads"
 	},
 	"routes": [
