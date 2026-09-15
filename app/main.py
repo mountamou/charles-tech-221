@@ -6,7 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, inspect, text
 
 from .config import settings
 from .database import Base, engine, SessionLocal, get_db
@@ -19,6 +19,27 @@ from . import cinetpay
 
 app = FastAPI(title="Charles Tech 221 V4 API", version="4.0.0")
 Base.metadata.create_all(engine)
+
+def migrate_schema():
+    """Add columns that models.py has gained since the database was created.
+
+    create_all() only creates missing tables — it never alters an existing one, and
+    with the database now persisted across deploys (Litestream/R2), every model field
+    added from here on needs this to actually reach a table that already exists.
+    """
+    insp = inspect(engine)
+    existing_tables = set(insp.get_table_names())
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue  # brand new table: create_all() above already built it in full
+            existing_cols = {c["name"] for c in insp.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_cols:
+                    continue
+                ddl_type = column.type.compile(dialect=engine.dialect)
+                conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {ddl_type}"))
+migrate_schema()
 
 def log(db, user_id, action, details=""):
     db.add(AuditLog(user_id=user_id, action=action, details=details))
