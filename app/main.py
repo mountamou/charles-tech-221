@@ -34,8 +34,14 @@ def seed():
             (settings.admin_email.lower(), settings.admin_password, "Administrateur Charles Tech 221", "admin"),
             (settings.employee_email.lower(), settings.employee_password, "Employé Charles Tech 221", "employee"),
         ]:
-            if not db.scalar(select(User).where(User.email == email)):
+            # These two system accounts are controlled by the ADMIN_PASSWORD/EMPLOYEE_PASSWORD
+            # secrets, not by the user: keep the stored hash in sync on every boot instead of
+            # only seeding once, so rotating the secret actually changes the login.
+            existing = db.scalar(select(User).where(User.email == email))
+            if not existing:
                 db.add(User(name=name,email=email,phone=settings.contact_phone,password_hash=hash_password(pwd),role=role))
+            elif not verify_password(pwd, existing.password_hash):
+                existing.password_hash = hash_password(pwd)
         defaults = [
             ("applications","Applications mobiles","Android, iOS et applications cross-platform modernes.",150000),
             ("web","Sites web","Sites vitrines, e-commerce et plateformes métiers.",100000),
