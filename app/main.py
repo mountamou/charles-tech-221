@@ -4,17 +4,18 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 from .config import settings
 from .database import Base, engine, SessionLocal, get_db
-from .models import User, Service, Project, ProjectFile, Invoice, Payment, Training, Enrollment, ContactMessage, Notification, AuditLog
-from .schemas import RegisterIn, LoginIn, UserOut, TokenOut, ProjectIn, ProjectUpdateIn, ContactIn, InvoiceIn, PaymentIn, PaymentStatusIn, EnrollmentIn, PasswordChangeIn
+from .models import User, Service, Project, ProjectFile, Invoice, Payment, Training, Enrollment, TrainingFile, ContactMessage, Notification, AuditLog
+from .schemas import RegisterIn, LoginIn, UserOut, TokenOut, ProjectIn, ProjectUpdateIn, ContactIn, InvoiceIn, PaymentIn, PaymentStatusIn, EnrollmentIn, TrainingVideoIn, PasswordChangeIn
 from .security import hash_password, verify_password, make_token, current_user, staff_user, admin_user
-from .pdf_utils import invoice_pdf
+from .pdf_utils import invoice_pdf, payment_receipt_pdf
 from . import storage
+from . import cinetpay
 
 app = FastAPI(title="Charles Tech 221 V4 API", version="4.0.0")
 Base.metadata.create_all(engine)
@@ -78,6 +79,7 @@ def public_config():
         "currency": settings.currency,
         "wave": settings.wave_merchant_number,
         "orange_money": settings.orange_money_number,
+        "cinetpay_enabled": bool(settings.cinetpay_api_key and settings.cinetpay_api_password),
     }
 
 @app.get("/api/services")
@@ -179,6 +181,37 @@ def invoice_download(invoice_id:int,user:User=Depends(current_user),db:Session=D
     buf=invoice_pdf(inv,client)
     return StreamingResponse(buf,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="{inv.reference}.pdf"'})
 
+@app.post("/api/invoices/{invoice_id}/pay")
+def invoice_pay(invoice_id:int,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    inv=db.get(Invoice,invoice_id)
+    if not inv or (inv.client_id!=user.id and user.role not in ("employee","admin")): raise HTTPException(404,"Facture introuvable")
+    if inv.status=="Payée": raise HTTPException(409,"Facture déjà payée")
+    row=Payment(invoice_id=inv.id,client_id=inv.client_id,method="CinetPay",amount=inv.amount,status="En attente")
+    db.add(row);db.commit();db.refresh(row)
+    try:
+        url=cinetpay.start_payment(db,row,inv,db.get(User,inv.client_id))
+    except cinetpay.CinetPayUnavailable as e:
+        raise HTTPException(503,str(e))
+    except cinetpay.AmountOutOfRange as e:
+        raise HTTPException(400,str(e))
+    log(db,user.id,"invoice_pay_init",inv.reference)
+    return {"payment_url":url}
+
+@app.get("/api/payments/{payment_id}/receipt")
+def payment_receipt(payment_id:int,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    p=db.get(Payment,payment_id)
+    if not p or (p.client_id!=user.id and user.role not in ("employee","admin")): raise HTTPException(404,"Paiement introuvable")
+    if p.status!="Validé": raise HTTPException(409,"Paiement non confirmé")
+    inv=db.get(Invoice,p.invoice_id)
+    client=db.get(User,p.client_id)
+    buf=payment_receipt_pdf(p,inv,client)
+    return StreamingResponse(buf,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="recu-{inv.reference}.pdf"'})
+
+@app.post("/api/payments/cinetpay/webhook")
+def cinetpay_webhook(data:dict,db:Session=Depends(get_db)):
+    cinetpay.confirm_from_webhook(db,data,log,notify)
+    return {"ok":True}
+
 @app.post("/api/payments")
 def declare_payment(data:PaymentIn,user:User=Depends(current_user),db:Session=Depends(get_db)):
     inv=db.get(Invoice,data.invoice_id)
@@ -211,6 +244,48 @@ def my_enrollments(user:User=Depends(current_user),db:Session=Depends(get_db)):
         tr=db.get(Training,e.training_id)
         result.append({"id":e.id,"training_id":e.training_id,"title":tr.title if tr else "Formation","status":e.status,"progress":e.progress})
     return result
+
+@app.post("/api/trainings/{training_id}/pay")
+def training_pay(training_id:int,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    tr=db.get(Training,training_id)
+    if not tr or not tr.active: raise HTTPException(404,"Formation introuvable")
+    if tr.price<=0: raise HTTPException(400,"Formation gratuite : utilisez l'inscription directe")
+    if db.scalar(select(Enrollment).where(Enrollment.user_id==user.id,Enrollment.training_id==training_id)):
+        raise HTTPException(409,"Vous êtes déjà inscrit")
+    ref=f"CT221-{datetime.utcnow():%Y%m}-{uuid4().hex[:6].upper()}"
+    inv=Invoice(client_id=user.id,training_id=tr.id,reference=ref,description=f"Formation : {tr.title}",amount=tr.price)
+    db.add(inv);db.commit();db.refresh(inv)
+    row=Payment(invoice_id=inv.id,client_id=user.id,method="CinetPay",amount=inv.amount,status="En attente")
+    db.add(row);db.commit();db.refresh(row)
+    try:
+        url=cinetpay.start_payment(db,row,inv,user)
+    except cinetpay.CinetPayUnavailable as e:
+        raise HTTPException(503,str(e))
+    except cinetpay.AmountOutOfRange as e:
+        raise HTTPException(400,str(e))
+    log(db,user.id,"training_pay_init",tr.title)
+    return {"payment_url":url}
+
+@app.get("/api/trainings/{training_id}/files")
+def training_files(training_id:int,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    if user.role not in ("employee","admin") and not db.scalar(select(Enrollment).where(Enrollment.user_id==user.id,Enrollment.training_id==training_id)):
+        raise HTTPException(403,"Inscription requise")
+    rows=db.scalars(select(TrainingFile).where(TrainingFile.training_id==training_id).order_by(TrainingFile.id)).all()
+    out=[]
+    for f in rows:
+        item={"id":f.id,"kind":f.kind,"label":f.label}
+        if f.kind=="video": item["video_url"]=f.video_url
+        else: item["download_url"]=f"/api/trainings/files/{f.id}"
+        out.append(item)
+    return out
+
+@app.get("/api/trainings/files/{file_id}")
+def training_file_download(file_id:int,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    row=db.get(TrainingFile,file_id)
+    if not row or row.kind!="pdf": raise HTTPException(404,"Fichier introuvable")
+    if user.role not in ("employee","admin") and not db.scalar(select(Enrollment).where(Enrollment.user_id==user.id,Enrollment.training_id==row.training_id)):
+        raise HTTPException(403,"Inscription requise")
+    return storage.download_response(row.stored_name,row.original_name or "support.pdf")
 
 @app.get("/api/notifications")
 def notifications(user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -295,6 +370,32 @@ def payment_status(payment_id:int,data:PaymentStatusIn,staff:User=Depends(staff_
     log(db,staff.id,"payment_status",f"Paiement #{p.id}: {p.status}")
     return {"ok":True}
 
+@app.post("/api/staff/trainings/{training_id}/video")
+def staff_training_video(training_id:int,data:TrainingVideoIn,staff:User=Depends(staff_user),db:Session=Depends(get_db)):
+    tr=db.get(Training,training_id)
+    if not tr: raise HTTPException(404,"Formation introuvable")
+    row=TrainingFile(training_id=training_id,kind="video",label=data.label,video_url=data.video_url)
+    db.add(row);db.commit()
+    log(db,staff.id,"staff_training_video",tr.title)
+    return {"ok":True,"id":row.id}
+
+@app.post("/api/staff/trainings/{training_id}/pdf")
+def staff_training_pdf(training_id:int,file:UploadFile=File(...),label:str="",staff:User=Depends(staff_user),db:Session=Depends(get_db)):
+    tr=db.get(Training,training_id)
+    if not tr: raise HTTPException(404,"Formation introuvable")
+    ext=Path(file.filename or "").suffix[:12]
+    stored=f"{uuid4().hex}{ext}"
+    storage.save(stored,file.file)
+    row=TrainingFile(training_id=training_id,kind="pdf",label=label,stored_name=stored,original_name=file.filename or stored)
+    db.add(row);db.commit()
+    log(db,staff.id,"staff_training_pdf",f"{tr.title}: {row.original_name}")
+    return {"ok":True,"id":row.id}
+
+@app.get("/api/staff/trainings/{training_id}/files")
+def staff_training_files(training_id:int,_:User=Depends(staff_user),db:Session=Depends(get_db)):
+    rows=db.scalars(select(TrainingFile).where(TrainingFile.training_id==training_id).order_by(TrainingFile.id)).all()
+    return [{"id":f.id,"kind":f.kind,"label":f.label,"video_url":f.video_url,"name":f.original_name} for f in rows]
+
 @app.get("/api/admin/users")
 def admin_users(_:User=Depends(admin_user),db:Session=Depends(get_db)):
     rows=db.scalars(select(User).order_by(User.created_at.desc())).all()
@@ -308,6 +409,16 @@ def admin_audit(_:User=Depends(admin_user),db:Session=Depends(get_db)):
 @app.get("/api/inventory/demo")
 def inventory_demo():
     return {"products":1256,"entries":235,"exits":187,"stock_value":12450000,"currency":"FCFA","low_stock":12}
+
+@app.get("/robots.txt")
+def robots():
+    lines=["User-agent: *","Disallow: /portal","Disallow: /staff","Disallow: /api/",f"Sitemap: {settings.public_base_url}/sitemap.xml"]
+    return PlainTextResponse("\n".join(lines))
+
+@app.get("/sitemap.xml")
+def sitemap():
+    xml=f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{settings.public_base_url}/</loc></url></urlset>'
+    return Response(content=xml,media_type="application/xml")
 
 STATIC=Path(__file__).parent/"static"
 app.mount("/static",StaticFiles(directory=STATIC),name="static")

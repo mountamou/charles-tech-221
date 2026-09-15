@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     r2_secret_access_key: str = ""
     r2_bucket: str = ""
 
+    # CinetPay (online payments): empty api key means the integration is disabled and
+    # only the manual Wave/Orange Money declaration flow is available.
+    cinetpay_api_key: str = ""
+    cinetpay_api_password: str = ""
+    cinetpay_country: str = "SN"
+    # Absolute site URL, needed for CinetPay's success/failed/notify callback URLs.
+    public_base_url: str = "http://127.0.0.1:8000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @model_validator(mode="after")

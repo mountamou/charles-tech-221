@@ -36,7 +36,9 @@
 		"WAVE_MERCHANT_NUMBER": "+221781910585",
 		"ORANGE_MONEY_NUMBER": "+221781910585",
 		"R2_ACCOUNT_ID": "f69c31c057ddfd20322c71943f8f036c",
-		"R2_BUCKET": "charlestech221-uploads"
+		"R2_BUCKET": "charlestech221-uploads",
+		"PUBLIC_BASE_URL": "https://www.charlestech221.com",
+		"CINETPAY_COUNTRY": "SN"
 	},
 	"routes": [
 		{ "pattern": "charlestech221.com", "custom_domain": true },

@@ -52,6 +52,7 @@ class Invoice(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    training_id: Mapped[int | None] = mapped_column(ForeignKey("trainings.id"), nullable=True)
     reference: Mapped[str] = mapped_column(String(60), unique=True, index=True)
     description: Mapped[str] = mapped_column(Text)
     amount: Mapped[float] = mapped_column(Float)
@@ -64,10 +65,16 @@ class Payment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
     client_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    method: Mapped[str] = mapped_column(String(30))  # Wave / Orange Money / Cash / Bank
+    method: Mapped[str] = mapped_column(String(30))  # Wave / Orange Money / Cash / Bank / CinetPay
     amount: Mapped[float] = mapped_column(Float)
     reference: Mapped[str] = mapped_column(String(120), default="")
     status: Mapped[str] = mapped_column(String(30), default="En attente")
+    # Gateway fields, only set for automatic (CinetPay) payments — empty for manual declarations.
+    gateway: Mapped[str] = mapped_column(String(20), default="")
+    gateway_transaction_id: Mapped[str] = mapped_column(String(80), default="")
+    merchant_transaction_id: Mapped[str] = mapped_column(String(40), default="")
+    notify_token: Mapped[str] = mapped_column(String(120), default="")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Training(Base):
@@ -85,6 +92,18 @@ class Enrollment(Base):
     training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id"))
     status: Mapped[str] = mapped_column(String(30), default="Inscrit")
     progress: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class TrainingFile(Base):
+    """A video link or PDF unlocked once a client is enrolled (free or paid) in the training."""
+    __tablename__ = "training_files"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id"))
+    kind: Mapped[str] = mapped_column(String(10))  # "video" | "pdf"
+    label: Mapped[str] = mapped_column(String(160), default="")
+    video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    stored_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    original_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class ContactMessage(Base):

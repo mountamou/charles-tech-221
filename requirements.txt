@@ -13,3 +13,4 @@ reportlab==4.4.3
 boto3==1.40.11
 pytest==8.4.1
 httpx==0.28.1
+cinetpay-python==0.1.0

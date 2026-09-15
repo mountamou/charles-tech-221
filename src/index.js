@@ -23,6 +23,8 @@ export class Backend extends Container {
 		ORANGE_MONEY_NUMBER: env.ORANGE_MONEY_NUMBER,
 		R2_ACCOUNT_ID: env.R2_ACCOUNT_ID,
 		R2_BUCKET: env.R2_BUCKET,
+		PUBLIC_BASE_URL: env.PUBLIC_BASE_URL,
+		CINETPAY_COUNTRY: env.CINETPAY_COUNTRY,
 		// Secrets (set via `wrangler secret put NAME` or the dashboard), forwarded as-is.
 		// The SQLite database path is fixed in the Dockerfile and replicated to R2 by Litestream.
 		SECRET_KEY: env.SECRET_KEY,
@@ -30,6 +32,8 @@ export class Backend extends Container {
 		EMPLOYEE_PASSWORD: env.EMPLOYEE_PASSWORD,
 		R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
 		R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+		CINETPAY_API_KEY: env.CINETPAY_API_KEY,
+		CINETPAY_API_PASSWORD: env.CINETPAY_API_PASSWORD,
 	});
 };
 

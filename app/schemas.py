@@ -61,6 +61,10 @@ class PaymentStatusIn(BaseModel):
 class EnrollmentIn(BaseModel):
     training_id: int
 
+class TrainingVideoIn(BaseModel):
+    label: str = Field(default="", max_length=160)
+    video_url: str = Field(min_length=5, max_length=500)
+
 class PasswordChangeIn(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)
