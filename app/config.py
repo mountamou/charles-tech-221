@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me"
     access_token_minutes: int = 1440
     database_url: str = "sqlite:///./charlestech_v4.db"
+    database_replicated: bool = False  # set by start.sh when Litestream replicates SQLite to R2
     environment: str = "local"
     upload_dir: str = ""
 
@@ -45,8 +46,10 @@ class Settings(BaseSettings):
             for password in (self.admin_password, self.employee_password):
                 if len(password) < 8 or password == "ChangeMe123!":
                     raise ValueError("Production requires configured team passwords")
-            if not self.database_url.startswith("postgresql+psycopg://"):
-                raise ValueError("Production requires PostgreSQL")
+            is_postgres = self.database_url.startswith("postgresql+psycopg://")
+            is_replicated_sqlite = self.database_url.startswith("sqlite") and self.database_replicated
+            if not (is_postgres or is_replicated_sqlite):
+                raise ValueError("Production requires PostgreSQL or a replicated SQLite database")
             has_r2 = self.r2_account_id and self.r2_access_key_id and self.r2_secret_access_key and self.r2_bucket
             if not self.upload_dir and not has_r2:
                 raise ValueError("Production requires either a persistent UPLOAD_DIR or R2 storage configured")
