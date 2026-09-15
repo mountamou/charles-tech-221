@@ -5,7 +5,7 @@ dbs:
     replica:
       type: s3
       bucket: ${R2_BUCKET}
-      path: litestream/charlestech.db
+      path: litestream/v2/charlestech.db
       endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}
